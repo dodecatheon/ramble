@@ -17,6 +17,7 @@ class IntelHpl(BuiltinHpl):
     purge_attribute('maintainers')
     maintainers('dodecatheon')
 
+    purge_attribute('tags')
     tags('optimized', 'intel', 'mkl')
 
     software_spec('imkl_2023p1', spack_spec='intel-oneapi-mkl@2023.1.0 threads=openmp')
