@@ -316,22 +316,42 @@ def tags(*values: str):
     return _execute_tag
 
 
+def _check_attributes(obj, message, *args):
+    for arg in args:
+        if not hasattr(obj, arg):
+            raise AttributeError(message +
+                                 f" does not contain attribute {arg}")
+
+
+def _excluded_attributes(name, message, *args):
+    if name in args:
+        raise DirectiveError(message)
+
+
 @shared_directive(dicts=())
 def purge_attribute(attr_name):
     """Purges all elements of attribute container attr_name."""
     def _execute_purge_attribute(obj):
         if hasattr(obj, attr_name):
             attr_obj = getattr(obj, attr_name)
+
+            _check_attributes(attr_obj,
+                              f"Attribute container {attr_name}",
+                              'clear')
+
             if getattr(attr_obj, 'clear', False):
                 attr_obj.clear()
-            else:
-                # Enforce duck-typing of attribute to have 'clear' method
-                raise AttributeError
+
     return _execute_purge_attribute
 
 
-def _remove_or_pop_item(obj, name):
+def _remove_or_pop_item(obj, obj_name, name):
     """Remove or pop item name from obj"""
+
+    _check_attributes(obj,
+                      f"{obj_name}",
+                      '__contains__')
+
     if getattr(obj, '__contains__', False):
         if name in obj:
             if getattr(obj, 'remove', False):
@@ -339,9 +359,8 @@ def _remove_or_pop_item(obj, name):
             elif getattr(obj, 'pop', False):
                 obj.pop(name)
             else:
-                raise AttributeError("No remove or pop methods available for object")
-    else:
-        raise AttributeError("obj does not have __contains__ attribute")
+                raise AttributeError("No remove or pop " +
+                                     f"methods available for {obj_name}")
 
 
 @shared_directive(dicts=())
@@ -350,15 +369,19 @@ def remove_attribute(attr_name, name, depth=0):
     def _execute_remove_attribute(obj):
         if hasattr(obj, attr_name):
             attr_obj = getattr(obj, attr_name)
+
+            _check_attributes(attr_obj,
+                              f"{attr_name}",
+                              '__contains__')
+
             if depth == 0:
                 _remove_or_pop_item(attr_obj, name)
             elif depth == 1:
                 if getattr(attr_obj, '__contains__', False):
                     for k in attr_obj:
-                        _remove_or_pop_item(attr_obj[k], name)
-                else:
-                    raise AttributeError(f"Attribute {attr_name} " +
-                                         "does not have __contains__ method")
+                        _remove_or_pop_item(attr_obj[k],
+                                            k,
+                                            name)
             else:
                 raise DirectiveError("remove_attribute directive " +
                                      f"not supported for depth {depth}")
@@ -371,56 +394,77 @@ def update_attribute(attr_name, name, **kwargs):
     attribute attr_name with each of the kwarg pairs. This works only
     when the name component can itself be updated using a kwargs dict"""
     def _execute_update_attribute_value(obj):
-        excluded_attributes = set(['workload_variables'])
-        if attr_name in excluded_attributes:
-            raise DirectiveError(f"Attribute {attr_name} cannot be " +
-                                 "updated using generic update_attribute")
+        _excluded_attributes(attr_name,
+                             f"Attribute {attr_name} cannot be " +
+                             "updated using generic update_attribute",
+                             'workload_variables',
+                             'tags',
+                             'maintainers')
 
         if hasattr(obj, attr_name):
             attr_obj = getattr(obj, attr_name)
-            if getattr(attr_obj, 'update', False):
-                if getattr(attr_obj, '__contains__', False):
-                    if name in attr_obj:
-                        if getattr(attr_obj, 'get', False):
-                            update_obj = attr_obj.get(name)
-                            # Handle dict-like name components
-                            if getattr(update_obj, 'update', False):
-                                for k, v in update_obj.items():
-                                    if k in kwargs:
-                                        assert isinstance(kwargs[k], type(v))
-                                update_obj.update(kwargs)
-                            else:
-                                # Enforce duck-typing of name component of
-                                # attribute to have the 'update' method.
-                                raise AttributeError
-                    else:
-                        attr_obj.update({name: kwargs})
-                else:
-                    # Enforce duck-typing of attribute container to be able to test
-                    # if name in attr_obj using '__contains__' method.
-                    raise AttributeError
+            # Enforce duck-typing
+            _check_attributes(attr_obj,
+                              attr_name,
+                              'update',
+                              '__contains__',
+                              'get')
+
+            if name in attr_obj:
+                update_obj = attr_obj.get(name)
+                _check_attributes(update_obj,
+                                  f"Component {name} of {attr_name}",
+                                  'update')
+                # Handle dict-like name components, and verify
+                # they are same type as replacements:
+                for k, v in update_obj.items():
+                    if k in kwargs:
+                        if not isinstance(kwargs[k], type(v)):
+                            raise DirectiveError("Replacement value type for"
+                                                 f"arg {k} of " +
+                                                 f"component {name} of " +
+                                                 f"attribute {attr_name} " +
+                                                 "does not match type of existing value")
+                if len(kwargs):
+                    update_obj.update(kwargs)
             else:
-                # Enforce duck-typing of attribute container to have the
-                # 'update' method.
-                raise AttributeError
+                attr_obj.update({name: kwargs})
     return _execute_update_attribute_value
 
 
+def _copy_item(obj, obj_name, name, newname, **kwargs):
+    """copy item name in obj to newname"""
+    _check_attributes(obj,
+                      obj_name,
+                      '__contains__',
+                      'get')
+
+    if getattr(obj, '__contains__', False):
+        if name in obj:
+            name_obj = obj.get(name)
+        else:
+            name_obj = {}
+        new_obj = deepcopy(name_obj)
+        if len(kwargs):
+            new_obj.update(kwargs)
+        obj.update({newname: new_obj})
+
+
 @shared_directive(dicts=())
-def copy_and_update_attribute_value(attr_name, name, newname, **kwargs):
+def copy_and_update_attribute_value(attr_name, name, newname, depth=0, **kwargs):
     """Copy component name in attribute attr_name to newname"""
     def _execute_copy_and_update_attribute_value(obj):
         if hasattr(obj, attr_name):
             attr_obj = getattr(obj, attr_name)
-
-            if name in attr_obj:
-                name_obj = attr_obj.get(name)
+            if depth == 0:
+                _copy_item(attr_obj, attr_name,
+                           name, newname, **kwargs)
+            elif depth == 1:
+                for k in attr_obj:
+                    _copy_item(attr_obj[k], f"component k in {attr_name}",
+                               name, newname, **kwargs)
             else:
-                name_obj = {}
-
-            new_obj = deepcopy(name_obj)
-            new_obj.update(kwargs)
-
-            attr_obj.update({newname: new_obj})
+                raise DirectiveError("copy_and_update_attribute_value directive " +
+                                     f"not supported for depth {depth}")
 
     return _execute_copy_and_update_attribute_value
