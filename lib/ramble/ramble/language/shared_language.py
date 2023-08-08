@@ -375,7 +375,7 @@ def remove_attribute(attr_name, name, depth=0):
                               '__contains__')
 
             if depth == 0:
-                _remove_or_pop_item(attr_obj, name)
+                _remove_or_pop_item(attr_obj, attr_name, name)
             elif depth == 1:
                 if getattr(attr_obj, '__contains__', False):
                     for k in attr_obj:

@@ -12,7 +12,9 @@ from ramble.expander import Expander
 
 
 class Wrfv3(SpackApplication):
-    '''Define Wrf version 3 application'''
+    '''The Weather Research and Forecasting (WRF) Model is a next-generation
+    mesoscale numerical weather prediction system designed for both
+    atmospheric research and operational forecasting applications.'''
     name = 'wrfv3'
 
     maintainers('douglasjacobsen')
