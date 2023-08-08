@@ -11,7 +11,7 @@ from ramble.app.builtin.hpl import Hpl as BuiltinHpl
 
 
 class IntelHpl(BuiltinHpl):
-    '''Test new description'''
+    '''Run HPL application using Intel MKL optimized binary from intel-oneapi-mpi package'''
     name = 'intel-hpl'
 
     # Replace existing maintainers
@@ -26,7 +26,7 @@ class IntelHpl(BuiltinHpl):
     software_spec('imkl_2023p1', spack_spec='intel-oneapi-mkl@2023.1.0 threads=openmp')
     purge_attribute('required_packages')
     remove_attribute('software_specs', 'hpl')
-    required_package('imkl_2023p1')
+    required_package('intel-oneapi-mkl')
 
     executable('execute',
                '{intel-oneapi-mkl}/mkl/latest/benchmarks/mp_linpack/xhpl_intel64_dynamic',
