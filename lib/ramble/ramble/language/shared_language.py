@@ -13,6 +13,7 @@ import ramble.language.language_helpers
 import ramble.success_criteria
 from ramble.language.language_base import DirectiveError
 from copy import deepcopy
+from fnmatch import fnmatch
 
 
 """This module contains directives directives that are shared between multiple object types
@@ -345,28 +346,45 @@ def purge_attribute(attr_name):
     return _execute_purge_attribute
 
 
-def _remove_or_pop_item(obj, obj_name, name):
-    """Remove or pop item name from obj"""
+def _remove_or_pop_item(obj, message, name):
+    """Remove or pop item name (with glob matching) from obj"""
 
     _check_attributes(obj,
-                      f"{obj_name}",
+                      f"{message}",
                       '__contains__')
 
     if getattr(obj, '__contains__', False):
-        if name in obj:
-            if getattr(obj, 'remove', False):
-                obj.remove(name)
-            elif getattr(obj, 'pop', False):
-                obj.pop(name)
-            else:
-                raise AttributeError("No remove or pop " +
-                                     f"methods available for {obj_name}")
+        if getattr(obj, 'remove', False):
+            remove_function = obj.remove
+        elif getattr(obj, 'pop', False):
+            remove_function = obj.pop
+        else:
+            raise AttributeError("No remove or pop " +
+                                 f"methods available for {message}")
+        for k in obj:
+            if fnmatch(k, name):
+                remove_function(k)
 
 
 @shared_directive(dicts=())
-def remove_attribute(attr_name, name, depth=0):
-    """Removes single component 'name' from attribute container attr_name at desired depth"""
-    def _execute_remove_attribute(obj):
+def remove_attribute_value(attr_name,
+                           name,
+                           key_attr_name=None,
+                           key_attr_keys='*'):
+    """Remove components glob-matching 'name' from attribute container attr_name,
+    optionally for all keys glob-matching expression 'key_attr_keys' in attribute
+    'key_attr_name'.
+
+    For example,
+
+    remove_attribute_value('workload_variables',
+                           '*time*',
+                           key_attr_name='workloads',
+                           key_attr_keys='*motor')
+
+    will remove all workload_variables with 'time' in their name from workloads ending
+    in 'motor'."""
+    def _execute_remove_attribute_value(obj):
         if hasattr(obj, attr_name):
             attr_obj = getattr(obj, attr_name)
 
@@ -374,18 +392,23 @@ def remove_attribute(attr_name, name, depth=0):
                               f"{attr_name}",
                               '__contains__')
 
-            if depth == 0:
-                _remove_or_pop_item(attr_obj, attr_name, name)
-            elif depth == 1:
-                if getattr(attr_obj, '__contains__', False):
-                    for k in attr_obj:
-                        _remove_or_pop_item(attr_obj[k],
-                                            k,
-                                            name)
+            if key_attr_name:
+                if hasattr(obj, key_attr_name):
+                    key_attr_obj = getattr(obj, key_attr_name)
+                    for k in key_attr_obj:
+                        if fnmatch(k, key_attr_keys):
+                            if k in attr_obj:
+                                _remove_or_pop_item(attr_obj[k],
+                                                    f"{k} in {attr_name}",
+                                                    name)
+
+                else:
+                    raise DirectiveError(f"{key_attr_name} " +
+                                         "not found in object")
             else:
-                raise DirectiveError("remove_attribute directive " +
-                                     f"not supported for depth {depth}")
-    return _execute_remove_attribute
+                _remove_or_pop_item(attr_obj, attr_name, name)
+
+    return _execute_remove_attribute_value
 
 
 @shared_directive(dicts=())
