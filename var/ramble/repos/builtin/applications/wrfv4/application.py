@@ -34,11 +34,11 @@ class Wrfv4(BuiltinWrfv3):
                   compiler='gcc9')
 
     # Use existing input files with new URLs and SHA256 values
-    update_attr_val('input_files', 'CONUS_2p5km',
+    update_attr_val('inputs', 'CONUS_2p5km',
                     url='https://www2.mmm.ucar.edu/wrf/users/benchmark/v422/v42_bench_conus2.5km.tar.gz',
                     sha256='dcae9965d1873c1c1e34e21ad653179783302b9a13528ac10fab092b998578f6')
 
-    update_attr_val('input_files', 'CONUS_12km',
+    update_attr_val('inputs', 'CONUS_12km',
                     url='https://www2.mmm.ucar.edu/wrf/users/benchmark/v422/v42_bench_conus12km.tar.gz',
                     sha256='6a0e87e3401efddc50539e71e5437fd7a5af9228b64cd4837e739737c3706fc3')
 

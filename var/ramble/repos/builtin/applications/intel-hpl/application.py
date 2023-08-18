@@ -24,8 +24,8 @@ class IntelHpl(BuiltinHpl):
     # Add imkl_2023p1 as a software_spec and required package,
     # while removing hpl from both
     software_spec('imkl_2023p1', spack_spec='intel-oneapi-mkl@2023.1.0 threads=openmp')
-    purge_attr('required_packages')
     remove_attr_val('software_specs', 'hpl')
+    purge_attr('required_packages')
     required_package('intel-oneapi-mkl')
 
     executable('execute',

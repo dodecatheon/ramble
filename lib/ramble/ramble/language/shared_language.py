@@ -352,30 +352,26 @@ def _remove_or_pop_item(obj, message, name):
 
     _check_attributes(obj,
                       f"{message}",
-                      '__contains__')
+                      '__iter__')
 
-    if getattr(obj, '__contains__', False):
-        if getattr(obj, 'remove', False):
-            remove_function = obj.remove
-        elif getattr(obj, 'pop', False):
-            remove_function = obj.pop
-        else:
-            raise AttributeError("No remove or pop " +
-                                 f"methods available for {message}")
-        name_not_found = True
-        for k in obj:
-            if fnmatch(k, name):
-                name_not_found = False
-                remove_function(k)
+    if getattr(obj, 'remove', False):
+        remove_function = obj.remove
+    elif getattr(obj, 'pop', False):
+        remove_function = obj.pop
+    else:
+        raise AttributeError("No remove or pop " +
+                             f"methods available for {message}")
 
-        if name_not_found:
-            raise DirectiveError("{message}[{name}] not found")
+    globmatched_keys = [k for k in obj if fnmatch(k, name)]
+    if len(globmatched_keys) > 0:
+        for k in globmatched_keys:
+            remove_function(k)
+    else:
+        raise DirectiveError("{message}[{name}] not found")
 
 
 @shared_directive(dicts=())
-def remove_attr_val(attr_name,
-                    name,
-                    keys=None):
+def remove_attr_val(attr_name, name, keys=None):
     """Remove components glob-matching 'name' from attribute container attr_name,
     optionally within all keys glob-matching expression 'keys' in attribute
     'attr_name'.
@@ -396,13 +392,16 @@ def remove_attr_val(attr_name,
         if keys:
             _check_attributes(attr_obj,
                               f"{attr_name}",
-                              '__iter__', '__next__', '__getitem__')
+                              '__iter__', '__getitem__')
 
-            for k in attr_obj:
-                if fnmatch(k, keys):
+            globmatched_keys = [k for k in attr_obj if fnmatch(k, keys)]
+            if len(globmatched_keys) > 0:
+                for k in globmatched_keys:
                     _remove_or_pop_item(attr_obj[k],
                                         f"{attr_name}[{k}]",
                                         name)
+            else:
+                raise DirectiveError(f"{attr_name}[{keys}] not found")
         else:
             _remove_or_pop_item(attr_obj, attr_name, name)
 
@@ -415,13 +414,12 @@ def _update_items(obj_val, message, name, **kwargs):
     #
     _check_attributes(obj_val,
                       message,
-                      '__iter__', '__next__', '__getitem__')
+                      '__iter__', '__getitem__')
 
     # Assume len(kwargs) > 0:
-    name_not_found = True
-    for key in obj_val:
-        if fnmatch(key, name):
-            name_not_found = False
+    globmatched_keys = [key for key in obj_val if fnmatch(key, name)]
+    if len(globmatched_keys) > 0:
+        for key in globmatched_keys:
             update_obj = obj_val[key]
             update_obj_name = f"{message}[{key}]"
             _check_attributes(update_obj,
@@ -437,9 +435,9 @@ def _update_items(obj_val, message, name, **kwargs):
                                              update_obj_name +
                                              " does not match type of existing value")
             for k, v in kwargs.items():
-                update_obj[k] = v.copy()
-
-    if name_not_found:
+                # Use a copy to avoid issues with lists, etc.
+                update_obj[k] = deepcopy(v)
+    else:
         raise DirectiveError(f"{message}[{name}] not found")
 
 
@@ -461,13 +459,16 @@ def update_attr_val(attr_name, name, keys=None, **kwargs):
             if keys:
                 _check_attributes(attr_obj,
                                   attr_name,
-                                  '__iter__', '__next__', '__getitem__')
-                for key in attr_obj:
-                    if fnmatch(key, keys):
+                                  '__iter__', '__getitem__')
+                globmatched_keys = [key for key in attr_obj if fnmatch(key, keys)]
+                if len(globmatched_keys) > 0:
+                    for key in globmatched_keys:
                         _update_items(attr_obj[key],
                                       f"{attr_name}[{key}]",
                                       name,
                                       **kwargs)
+                else:
+                    raise DirectiveError(f"{attr_name}[{keys}] not found")
             else:
                 _update_items(attr_obj,
                               f"{attr_name}",
@@ -508,25 +509,21 @@ def copy_attr_val(attr_name, name, newname, from_key=None, to_keys='*'):
 
         if from_key:
             _check_attributes(attr_obj, attr_name,
-                              '__contains__', '__getitem__',
-                              '__iter__', '__next__')
+                              '__contains__', '__getitem__', '__iter__')
 
             if from_key in attr_obj:
                 new_dict = _copy_item(attr_obj[from_key],
                                       f"{attr_name}[{from_key}]",
                                       name)
 
-                to_keys_not_found = True
-                for key in attr_obj:
-                    if fnmatch(key, to_keys):
-                        to_keys_not_found = False
+                globmatched_keys = [key for key in attr_obj if fnmatch(key, to_keys)]
+                if len(globmatched_keys) > 0:
+                    for key in globmatched_keys:
                         _create_item(attr_obj[key],
                                      f"{attr_name}[{key}]",
                                      newname, new_dict)
-
-                if to_keys_not_found:
+                else:
                     raise DirectiveError(f"{attr_name}[{to_keys}] not found")
-
             else:
                 raise DirectiveError(f"{attr_name}[{from_key}] not found")
         else:
