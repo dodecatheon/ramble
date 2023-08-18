@@ -501,8 +501,8 @@ def _copy_item(obj, obj_name, name):
 
 # Internal utility function
 def _create_item(obj, message, newname, new_dict):
-    _check_attrs(obj, message, 'update')
-    obj.update({newname: deepcopy(new_dict)})
+    _check_attrs(obj, message, '__getitem__')
+    obj[newname] = deepcopy(new_dict)
 
 
 @shared_directive(dicts=())

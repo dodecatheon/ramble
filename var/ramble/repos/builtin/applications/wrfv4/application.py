@@ -20,11 +20,11 @@ class Wrfv4(BuiltinWrfv3):
     maintainers('dodecatheon')
 
     # Replace existing default compiler
-    purge_attr('default_compilers')
+    purge_attr_vals('default_compilers')
     default_compiler('gcc9', spack_spec='gcc@9.3.0')
 
     # Clear out software_specs
-    purge_attr('software_specs')
+    purge_attr_vals('software_specs')
 
     software_spec('intel-mpi', spack_spec="intel-mpi@2018.4.274",
                   compiler='gcc9')
