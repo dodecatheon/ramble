@@ -317,42 +317,39 @@ def tags(*values: str):
     return _execute_tag
 
 
-def _check_attributes(obj, message, *args):
+# Internal utility function
+def _check_attrs(obj, message, *args):
     for arg in args:
         if not hasattr(obj, arg):
             raise AttributeError(message +
                                  f" does not contain attribute {arg}")
 
 
-def _excluded_attributes(name, message, *args):
-    if name in args:
-        raise DirectiveError(message)
-
-
 @shared_directive(dicts=())
-def purge_attr(attr_name):
+def purge_attr_vals(attr_name):
     """Purges all elements of attribute container attr_name in object obj."""
-    def _execute_purge_attr(obj):
+    def _execute_purge_attr_vals(obj):
 
-        _check_attributes(obj, "Object", attr_name)
+        _check_attrs(obj, "Object", attr_name)
 
         attr_obj = getattr(obj, attr_name)
 
-        _check_attributes(attr_obj,
-                          f"Attribute container {attr_name}",
-                          'clear')
+        _check_attrs(attr_obj,
+                     f"Attribute container {attr_name}",
+                     'clear')
 
         attr_obj.clear()
 
-    return _execute_purge_attr
+    return _execute_purge_attr_vals
 
 
+# Internal utility function
 def _remove_or_pop_item(obj, message, name):
     """Remove or pop item name (with glob matching) from obj"""
 
-    _check_attributes(obj,
-                      f"{message}",
-                      '__iter__')
+    _check_attrs(obj,
+                 f"{message}",
+                 '__iter__')
 
     if getattr(obj, 'remove', False):
         remove_function = obj.remove
@@ -385,14 +382,14 @@ def remove_attr_val(attr_name, name, keys=None):
     will remove all workload_variables with 'time' in their name from workloads ending
     in 'motor'."""
     def _execute_remove_attr_val(obj):
-        _check_attributes(obj, "Object", attr_name)
+        _check_attrs(obj, "Object", attr_name)
 
         attr_obj = getattr(obj, attr_name)
 
         if keys:
-            _check_attributes(attr_obj,
-                              f"{attr_name}",
-                              '__iter__', '__getitem__')
+            _check_attrs(attr_obj,
+                         f"{attr_name}",
+                         '__iter__', '__getitem__')
 
             globmatched_keys = [k for k in attr_obj if fnmatch(k, keys)]
             if len(globmatched_keys) > 0:
@@ -408,13 +405,14 @@ def remove_attr_val(attr_name, name, keys=None):
     return _execute_remove_attr_val
 
 
+# Internal utility function
 def _update_items(obj_val, message, name, **kwargs):
     #
     # Duck-type for iteration and [] indexing
     #
-    _check_attributes(obj_val,
-                      message,
-                      '__iter__', '__getitem__')
+    _check_attrs(obj_val,
+                 message,
+                 '__iter__', '__getitem__')
 
     # Assume len(kwargs) > 0:
     globmatched_keys = [key for key in obj_val if fnmatch(key, name)]
@@ -422,9 +420,9 @@ def _update_items(obj_val, message, name, **kwargs):
         for key in globmatched_keys:
             update_obj = obj_val[key]
             update_obj_name = f"{message}[{key}]"
-            _check_attributes(update_obj,
-                              update_obj_name,
-                              'items')
+            _check_attrs(update_obj,
+                         update_obj_name,
+                         'items')
             # Verify that any replacement values
             # in kwargs are of the same type as what they
             # are replacing
@@ -441,25 +439,31 @@ def _update_items(obj_val, message, name, **kwargs):
         raise DirectiveError(f"{message}[{name}] not found")
 
 
+# Internal utility function
+def _excluded_attrs(name, message, *args):
+    if name in args:
+        raise DirectiveError(message)
+
+
 @shared_directive(dicts=())
 def update_attr_val(attr_name, name, keys=None, **kwargs):
     """Update attr_name[name] with kwargs, or attr_name[keys][name]
     if keys are provided. Both name and keys use glob matching."""
     def _execute_update_attr_val(obj):
-        _excluded_attributes(attr_name,
-                             f"Attribute {attr_name} cannot be " +
-                             "updated using generic update_attribute",
-                             'tags',
-                             'maintainers')
+        _excluded_attrs(attr_name,
+                        f"Attribute {attr_name} cannot be " +
+                        "updated using generic update_attribute",
+                        'tags',
+                        'maintainers')
 
-        _check_attributes(obj, "Object", attr_name)
+        _check_attrs(obj, "Object", attr_name)
 
         if len(kwargs) > 0:
             attr_obj = getattr(obj, attr_name)
             if keys:
-                _check_attributes(attr_obj,
-                                  attr_name,
-                                  '__iter__', '__getitem__')
+                _check_attrs(attr_obj,
+                             attr_name,
+                             '__iter__', '__getitem__')
                 globmatched_keys = [key for key in attr_obj if fnmatch(key, keys)]
                 if len(globmatched_keys) > 0:
                     for key in globmatched_keys:
@@ -480,9 +484,10 @@ def update_attr_val(attr_name, name, keys=None, **kwargs):
     return _execute_update_attr_val
 
 
+# Internal utility function
 def _copy_item(obj, obj_name, name):
     """copy obj[name] to new_obj"""
-    _check_attributes(obj, obj_name, '__contains__', '__getitem__')
+    _check_attrs(obj, obj_name, '__contains__', '__getitem__')
     # New thing doesn't have to be a dict, but it usually is
     # so just call it that
     new_dict = {}
@@ -494,8 +499,9 @@ def _copy_item(obj, obj_name, name):
     return new_dict
 
 
+# Internal utility function
 def _create_item(obj, message, newname, new_dict):
-    _check_attributes(obj, message, 'update')
+    _check_attrs(obj, message, 'update')
     obj.update({newname: deepcopy(new_dict)})
 
 
@@ -503,13 +509,13 @@ def _create_item(obj, message, newname, new_dict):
 def copy_attr_val(attr_name, name, newname, from_key=None, to_keys='*'):
     """Copy component name in attribute attr_name to newname"""
     def _execute_copy_attr_val(obj):
-        _check_attributes(obj, "Object", attr_name)
+        _check_attrs(obj, "Object", attr_name)
 
         attr_obj = getattr(obj, attr_name)
 
         if from_key:
-            _check_attributes(attr_obj, attr_name,
-                              '__contains__', '__getitem__', '__iter__')
+            _check_attrs(attr_obj, attr_name,
+                         '__contains__', '__getitem__', '__iter__')
 
             if from_key in attr_obj:
                 new_dict = _copy_item(attr_obj[from_key],
