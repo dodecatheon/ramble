@@ -15,7 +15,7 @@ class IntelHpl(BuiltinHpl):
     name = 'intel-hpl'
 
     # Replace existing maintainers
-    purge_attribute('maintainers')
+    purge_attr('maintainers')
     maintainers('dodecatheon')
 
     # Append to existing tags
@@ -24,8 +24,8 @@ class IntelHpl(BuiltinHpl):
     # Add imkl_2023p1 as a software_spec and required package,
     # while removing hpl from both
     software_spec('imkl_2023p1', spack_spec='intel-oneapi-mkl@2023.1.0 threads=openmp')
-    purge_attribute('required_packages')
-    remove_attribute('software_specs', 'hpl')
+    purge_attr('required_packages')
+    remove_attr_val('software_specs', 'hpl')
     required_package('intel-oneapi-mkl')
 
     executable('execute',
@@ -34,7 +34,8 @@ class IntelHpl(BuiltinHpl):
 
     # Redefine default workload variable bcast to 6 for the MKL-optimized
     # calculator workload
-    workload_variable('bcast',
-                      default='6',
-                      description='BCAST for Intel MKL optimized calculator',
-                      workloads=['calculator'])
+    update_attr_val('workload_variables',
+                    'bcast',
+                    keys='calc*',
+                    default='6',
+                    description='BCAST for Intel MKL optimized calculator')

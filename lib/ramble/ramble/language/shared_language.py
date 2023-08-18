@@ -330,20 +330,21 @@ def _excluded_attributes(name, message, *args):
 
 
 @shared_directive(dicts=())
-def purge_attribute(attr_name):
-    """Purges all elements of attribute container attr_name."""
-    def _execute_purge_attribute(obj):
-        if hasattr(obj, attr_name):
-            attr_obj = getattr(obj, attr_name)
+def purge_attr(attr_name):
+    """Purges all elements of attribute container attr_name in object obj."""
+    def _execute_purge_attr(obj):
 
-            _check_attributes(attr_obj,
-                              f"Attribute container {attr_name}",
-                              'clear')
+        _check_attributes(obj, "Object", attr_name)
 
-            if getattr(attr_obj, 'clear', False):
-                attr_obj.clear()
+        attr_obj = getattr(obj, attr_name)
 
-    return _execute_purge_attribute
+        _check_attributes(attr_obj,
+                          f"Attribute container {attr_name}",
+                          'clear')
+
+        attr_obj.clear()
+
+    return _execute_purge_attr
 
 
 def _remove_or_pop_item(obj, message, name):
@@ -361,133 +362,175 @@ def _remove_or_pop_item(obj, message, name):
         else:
             raise AttributeError("No remove or pop " +
                                  f"methods available for {message}")
+        name_not_found = True
         for k in obj:
             if fnmatch(k, name):
+                name_not_found = False
                 remove_function(k)
+
+        if name_not_found:
+            raise DirectiveError("{message}[{name}] not found")
 
 
 @shared_directive(dicts=())
-def remove_attribute_value(attr_name,
-                           name,
-                           key_attr_name=None,
-                           key_attr_keys='*'):
+def remove_attr_val(attr_name,
+                    name,
+                    keys=None):
     """Remove components glob-matching 'name' from attribute container attr_name,
-    optionally for all keys glob-matching expression 'key_attr_keys' in attribute
-    'key_attr_name'.
+    optionally within all keys glob-matching expression 'keys' in attribute
+    'attr_name'.
 
     For example,
 
-    remove_attribute_value('workload_variables',
-                           '*time*',
-                           key_attr_name='workloads',
-                           key_attr_keys='*motor')
+    remove_attr_val('workload_variables',
+                    '*time*',
+                    keys='*motor')
 
     will remove all workload_variables with 'time' in their name from workloads ending
     in 'motor'."""
-    def _execute_remove_attribute_value(obj):
-        if hasattr(obj, attr_name):
-            attr_obj = getattr(obj, attr_name)
+    def _execute_remove_attr_val(obj):
+        _check_attributes(obj, "Object", attr_name)
 
+        attr_obj = getattr(obj, attr_name)
+
+        if keys:
             _check_attributes(attr_obj,
                               f"{attr_name}",
-                              '__contains__')
+                              '__iter__', '__next__', '__getitem__')
 
-            if key_attr_name:
-                if hasattr(obj, key_attr_name):
-                    key_attr_obj = getattr(obj, key_attr_name)
-                    for k in key_attr_obj:
-                        if fnmatch(k, key_attr_keys):
-                            if k in attr_obj:
-                                _remove_or_pop_item(attr_obj[k],
-                                                    f"{k} in {attr_name}",
-                                                    name)
+            for k in attr_obj:
+                if fnmatch(k, keys):
+                    _remove_or_pop_item(attr_obj[k],
+                                        f"{attr_name}[{k}]",
+                                        name)
+        else:
+            _remove_or_pop_item(attr_obj, attr_name, name)
 
-                else:
-                    raise DirectiveError(f"{key_attr_name} " +
-                                         "not found in object")
-            else:
-                _remove_or_pop_item(attr_obj, attr_name, name)
+    return _execute_remove_attr_val
 
-    return _execute_remove_attribute_value
+
+def _update_items(obj_val, message, name, **kwargs):
+    #
+    # Duck-type for iteration and [] indexing
+    #
+    _check_attributes(obj_val,
+                      message,
+                      '__iter__', '__next__', '__getitem__')
+
+    # Assume len(kwargs) > 0:
+    name_not_found = True
+    for key in obj_val:
+        if fnmatch(key, name):
+            name_not_found = False
+            update_obj = obj_val[key]
+            update_obj_name = f"{message}[{key}]"
+            _check_attributes(update_obj,
+                              update_obj_name,
+                              'items')
+            # Verify that any replacement values
+            # in kwargs are of the same type as what they
+            # are replacing
+            for k, v in update_obj.items():
+                if k in kwargs:
+                    if not isinstance(kwargs[k], type(v)):
+                        raise DirectiveError("Replacement value type for" +
+                                             update_obj_name +
+                                             " does not match type of existing value")
+            for k, v in kwargs.items():
+                update_obj[k] = v.copy()
+
+    if name_not_found:
+        raise DirectiveError(f"{message}[{name}] not found")
 
 
 @shared_directive(dicts=())
-def update_attribute(attr_name, name, **kwargs):
-    """For each of the kw arg=val pairs, update the name component within
-    attribute attr_name with each of the kwarg pairs. This works only
-    when the name component can itself be updated using a kwargs dict"""
-    def _execute_update_attribute_value(obj):
+def update_attr_val(attr_name, name, keys=None, **kwargs):
+    """Update attr_name[name] with kwargs, or attr_name[keys][name]
+    if keys are provided. Both name and keys use glob matching."""
+    def _execute_update_attr_val(obj):
         _excluded_attributes(attr_name,
                              f"Attribute {attr_name} cannot be " +
                              "updated using generic update_attribute",
-                             'workload_variables',
                              'tags',
                              'maintainers')
 
-        if hasattr(obj, attr_name):
+        _check_attributes(obj, "Object", attr_name)
+
+        if len(kwargs) > 0:
             attr_obj = getattr(obj, attr_name)
-            # Enforce duck-typing
-            _check_attributes(attr_obj,
-                              attr_name,
-                              'update',
-                              '__contains__',
-                              'get')
-
-            if name in attr_obj:
-                update_obj = attr_obj.get(name)
-                _check_attributes(update_obj,
-                                  f"Component {name} of {attr_name}",
-                                  'update')
-                # Handle dict-like name components, and verify
-                # they are same type as replacements:
-                for k, v in update_obj.items():
-                    if k in kwargs:
-                        if not isinstance(kwargs[k], type(v)):
-                            raise DirectiveError("Replacement value type for"
-                                                 f"arg {k} of " +
-                                                 f"component {name} of " +
-                                                 f"attribute {attr_name} " +
-                                                 "does not match type of existing value")
-                if len(kwargs):
-                    update_obj.update(kwargs)
+            if keys:
+                _check_attributes(attr_obj,
+                                  attr_name,
+                                  '__iter__', '__next__', '__getitem__')
+                for key in attr_obj:
+                    if fnmatch(key, keys):
+                        _update_items(attr_obj[key],
+                                      f"{attr_name}[{key}]",
+                                      name,
+                                      **kwargs)
             else:
-                attr_obj.update({name: kwargs})
-    return _execute_update_attribute_value
-
-
-def _copy_item(obj, obj_name, name, newname, **kwargs):
-    """copy item name in obj to newname"""
-    _check_attributes(obj,
-                      obj_name,
-                      '__contains__',
-                      'get')
-
-    if getattr(obj, '__contains__', False):
-        if name in obj:
-            name_obj = obj.get(name)
+                _update_items(attr_obj,
+                              f"{attr_name}",
+                              name,
+                              **kwargs)
         else:
-            name_obj = {}
-        new_obj = deepcopy(name_obj)
-        if len(kwargs):
-            new_obj.update(kwargs)
-        obj.update({newname: new_obj})
+            raise DirectiveError("No kwargs provided for update_attr_val")
+
+    return _execute_update_attr_val
+
+
+def _copy_item(obj, obj_name, name):
+    """copy obj[name] to new_obj"""
+    _check_attributes(obj, obj_name, '__contains__', '__getitem__')
+    # New thing doesn't have to be a dict, but it usually is
+    # so just call it that
+    new_dict = {}
+    if name in obj:
+        new_dict = deepcopy(obj[name])
+    else:
+        raise DirectiveError(f"{obj_name}[{name}] not found")
+
+    return new_dict
+
+
+def _create_item(obj, message, newname, new_dict):
+    _check_attributes(obj, message, 'update')
+    obj.update({newname: deepcopy(new_dict)})
 
 
 @shared_directive(dicts=())
-def copy_and_update_attribute_value(attr_name, name, newname, depth=0, **kwargs):
+def copy_attr_val(attr_name, name, newname, from_key=None, to_keys='*'):
     """Copy component name in attribute attr_name to newname"""
-    def _execute_copy_and_update_attribute_value(obj):
-        if hasattr(obj, attr_name):
-            attr_obj = getattr(obj, attr_name)
-            if depth == 0:
-                _copy_item(attr_obj, attr_name,
-                           name, newname, **kwargs)
-            elif depth == 1:
-                for k in attr_obj:
-                    _copy_item(attr_obj[k], f"component k in {attr_name}",
-                               name, newname, **kwargs)
-            else:
-                raise DirectiveError("copy_and_update_attribute_value directive " +
-                                     f"not supported for depth {depth}")
+    def _execute_copy_attr_val(obj):
+        _check_attributes(obj, "Object", attr_name)
 
-    return _execute_copy_and_update_attribute_value
+        attr_obj = getattr(obj, attr_name)
+
+        if from_key:
+            _check_attributes(attr_obj, attr_name,
+                              '__contains__', '__getitem__',
+                              '__iter__', '__next__')
+
+            if from_key in attr_obj:
+                new_dict = _copy_item(attr_obj[from_key],
+                                      f"{attr_name}[{from_key}]",
+                                      name)
+
+                to_keys_not_found = True
+                for key in attr_obj:
+                    if fnmatch(key, to_keys):
+                        to_keys_not_found = False
+                        _create_item(attr_obj[key],
+                                     f"{attr_name}[{key}]",
+                                     newname, new_dict)
+
+                if to_keys_not_found:
+                    raise DirectiveError(f"{attr_name}[{to_keys}] not found")
+
+            else:
+                raise DirectiveError(f"{attr_name}[{from_key}] not found")
+        else:
+            new_dict = _copy_item(attr_obj, attr_name, name)
+            _create_item(attr_obj, attr_name, newname, new_dict)
+
+    return _execute_copy_attr_val
