@@ -15,7 +15,6 @@ from ramble.language.language_base import DirectiveError
 from copy import deepcopy
 from fnmatch import fnmatch
 
-
 """This module contains directives directives that are shared between multiple object types
 
 Directives are functions that can be called inside an object
@@ -326,16 +325,16 @@ def _check_attrs(obj, message, *args):
 
 
 @shared_directive(dicts=())
-def purge_attr_vals(attr_name):
+def purge_attr_vals(attr_name, obj_name=__name__):
     """Purges all elements of attribute container attr_name in object obj."""
     def _execute_purge_attr_vals(obj):
 
-        _check_attrs(obj, "Object", attr_name)
+        _check_attrs(obj, obj_name, attr_name)
 
         attr_obj = getattr(obj, attr_name)
 
         _check_attrs(attr_obj,
-                     f"Attribute container {attr_name}",
+                     f"{obj_name} container {attr_name}",
                      'clear')
 
         attr_obj.clear()
@@ -344,13 +343,7 @@ def purge_attr_vals(attr_name):
 
 
 # Internal utility function
-def _remove_or_pop_item(obj, message, name):
-    """Remove or pop item name (with glob matching) from obj"""
-
-    _check_attrs(obj,
-                 f"{message}",
-                 '__iter__')
-
+def _remove_or_pop(obj, message):
     if getattr(obj, 'remove', False):
         remove_function = obj.remove
     elif getattr(obj, 'pop', False):
@@ -358,6 +351,18 @@ def _remove_or_pop_item(obj, message, name):
     else:
         raise AttributeError("No remove or pop " +
                              f"methods available for {message}")
+    return remove_function
+
+
+# Internal utility function
+def _remove_or_pop_item(obj, message, name):
+    """Remove or pop item name (with glob matching) from obj"""
+
+    _check_attrs(obj,
+                 message,
+                 '__iter__')
+
+    remove_function = _remove_or_pop(obj, message)
 
     globmatched_keys = [k for k in obj if fnmatch(k, name)]
     if len(globmatched_keys) > 0:
@@ -368,7 +373,7 @@ def _remove_or_pop_item(obj, message, name):
 
 
 @shared_directive(dicts=())
-def remove_attr_val(attr_name, name, keys=None):
+def remove_attr_val(attr_name, name, obj_name=__name__, keys=None):
     """Remove components glob-matching 'name' from attribute container attr_name,
     optionally within all keys glob-matching expression 'keys' in attribute
     'attr_name'.
@@ -382,13 +387,13 @@ def remove_attr_val(attr_name, name, keys=None):
     will remove all workload_variables with 'time' in their name from workloads ending
     in 'motor'."""
     def _execute_remove_attr_val(obj):
-        _check_attrs(obj, "Object", attr_name)
+        _check_attrs(obj, obj_name, attr_name)
 
         attr_obj = getattr(obj, attr_name)
 
         if keys:
             _check_attrs(attr_obj,
-                         f"{attr_name}",
+                         attr_name,
                          '__iter__', '__getitem__')
 
             globmatched_keys = [k for k in attr_obj if fnmatch(k, keys)]
@@ -397,6 +402,9 @@ def remove_attr_val(attr_name, name, keys=None):
                     _remove_or_pop_item(attr_obj[k],
                                         f"{attr_name}[{k}]",
                                         name)
+                    if len(attr_obj[k]) == 0:
+                        # If attr_obj[k] is now empty, remove it:
+                        _remove_or_pop(attr_obj, attr_name)(attr_obj[k])
             else:
                 raise DirectiveError(f"{attr_name}[{keys}] not found")
         else:
@@ -446,17 +454,17 @@ def _excluded_attrs(name, message, *args):
 
 
 @shared_directive(dicts=())
-def update_attr_val(attr_name, name, keys=None, **kwargs):
+def update_attr_val(attr_name, name, keys=None, obj_name=__name__, **kwargs):
     """Update attr_name[name] with kwargs, or attr_name[keys][name]
     if keys are provided. Both name and keys use glob matching."""
     def _execute_update_attr_val(obj):
         _excluded_attrs(attr_name,
-                        f"Attribute {attr_name} cannot be " +
-                        "updated using generic update_attribute",
+                        f"{obj_name} attribute {attr_name} cannot be " +
+                        "updated using update_attr_val",
                         'tags',
                         'maintainers')
 
-        _check_attrs(obj, "Object", attr_name)
+        _check_attrs(obj, obj_name, attr_name)
 
         if len(kwargs) > 0:
             attr_obj = getattr(obj, attr_name)
@@ -506,10 +514,10 @@ def _create_item(obj, message, newname, new_dict):
 
 
 @shared_directive(dicts=())
-def copy_attr_val(attr_name, name, newname, from_key=None, to_keys='*'):
+def copy_attr_val(attr_name, name, newname, from_key=None, to_keys='*', obj_name=__name__):
     """Copy component name in attribute attr_name to newname"""
     def _execute_copy_attr_val(obj):
-        _check_attrs(obj, "Object", attr_name)
+        _check_attrs(obj, obj_name, attr_name)
 
         attr_obj = getattr(obj, attr_name)
 

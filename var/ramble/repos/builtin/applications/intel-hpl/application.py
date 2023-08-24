@@ -15,7 +15,8 @@ class IntelHpl(BuiltinHpl):
     name = 'intel-hpl'
 
     # Replace existing maintainers
-    purge_attr_vals('maintainers')
+    # purge_attr_vals('maintainers')
+    remove_attr_val('maintainers', '*')
     maintainers('dodecatheon')
 
     # Append to existing tags
@@ -25,7 +26,8 @@ class IntelHpl(BuiltinHpl):
     # while removing hpl from both
     software_spec('imkl_2023p1', spack_spec='intel-oneapi-mkl@2023.1.0 threads=openmp')
     remove_attr_val('software_specs', 'hpl')
-    purge_attr_vals('required_packages')
+    # purge_attr_vals('required_packages')
+    remove_attr_val('required_packages', '*')
     required_package('intel-oneapi-mkl')
 
     executable('execute',
