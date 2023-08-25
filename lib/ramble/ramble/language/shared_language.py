@@ -555,15 +555,26 @@ def copy_attr_val(attr_name, name, newname, from_key=None, to_keys='*'):
 
 @shared_directive(dicts=())
 def import_attr_from_class(other_cls, attr_name):
-    """Import attribute attr_name from class other_cls"""
+    """Import attribute attr_name from class other_cls.
+    attr_name can be a glob expression."""
     def _execute_import_attr_from_class(obj):
         # Create an instance of the class
         other_cls_obj = other_cls()
 
-        # Check whether that class contains the desired attribute
-        _check_attrs(other_cls_obj, type(other_cls_obj).__name__, attr_name)
+        other_names = [name
+                       for name in dir(other_cls_obj)
+                       if fnmatch(name, attr_name)]
 
-        # Copy the contents of that attribute in the other class into
-        # an attribute with the same name in the current class
-        setattr(obj, attr_name, deepcopy(getattr(other_cls_obj, attr_name)))
+        if len(other_names) > 0:
+            for name in other_names:
+                # Copy the contents of that attribute in the other class into
+                # an attribute with the same name in the current class
+                setattr(obj,
+                        name,
+                        deepcopy(getattr(other_cls_obj, name)))
+        else:
+            other_cls_name = type(other_cls_obj).__name__
+            raise DirectiveError(f"No attribute named {attr_name} " +
+                                 f"found in class {other_cls_name}")
+
     return _execute_import_attr_from_class
