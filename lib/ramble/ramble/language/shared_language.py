@@ -325,9 +325,11 @@ def _check_attrs(obj, message, *args):
 
 
 @shared_directive(dicts=())
-def purge_attr_vals(attr_name, obj_name=__name__):
+def purge_attr_vals(attr_name):
     """Purges all elements of attribute container attr_name in object obj."""
     def _execute_purge_attr_vals(obj):
+
+        obj_name = type(obj).__name__
 
         _check_attrs(obj, obj_name, attr_name)
 
@@ -373,7 +375,7 @@ def _remove_or_pop_item(obj, message, name):
 
 
 @shared_directive(dicts=())
-def remove_attr_val(attr_name, name, obj_name=__name__, keys=None):
+def remove_attr_val(attr_name, name, keys=None):
     """Remove components glob-matching 'name' from attribute container attr_name,
     optionally within all keys glob-matching expression 'keys' in attribute
     'attr_name'.
@@ -387,6 +389,8 @@ def remove_attr_val(attr_name, name, obj_name=__name__, keys=None):
     will remove all workload_variables with 'time' in their name from workloads ending
     in 'motor'."""
     def _execute_remove_attr_val(obj):
+        obj_name = type(obj).__name__
+
         _check_attrs(obj, obj_name, attr_name)
 
         attr_obj = getattr(obj, attr_name)
@@ -454,10 +458,12 @@ def _excluded_attrs(name, message, *args):
 
 
 @shared_directive(dicts=())
-def update_attr_val(attr_name, name, keys=None, obj_name=__name__, **kwargs):
+def update_attr_val(attr_name, name, keys=None, **kwargs):
     """Update attr_name[name] with kwargs, or attr_name[keys][name]
     if keys are provided. Both name and keys use glob matching."""
     def _execute_update_attr_val(obj):
+        obj_name = type(obj).__name__
+
         _excluded_attrs(attr_name,
                         f"{obj_name} attribute {attr_name} cannot be " +
                         "updated using update_attr_val",
@@ -514,10 +520,10 @@ def _create_item(obj, message, newname, new_dict):
 
 
 @shared_directive(dicts=())
-def copy_attr_val(attr_name, name, newname, from_key=None, to_keys='*', obj_name=__name__):
+def copy_attr_val(attr_name, name, newname, from_key=None, to_keys='*'):
     """Copy component name in attribute attr_name to newname"""
     def _execute_copy_attr_val(obj):
-        _check_attrs(obj, obj_name, attr_name)
+        _check_attrs(obj, type(obj).__name__, attr_name)
 
         attr_obj = getattr(obj, attr_name)
 
@@ -545,3 +551,19 @@ def copy_attr_val(attr_name, name, newname, from_key=None, to_keys='*', obj_name
             _create_item(attr_obj, attr_name, newname, new_dict)
 
     return _execute_copy_attr_val
+
+
+@shared_directive(dicts=())
+def import_attr_from_class(other_cls, attr_name):
+    """Import attribute attr_name from class other_cls"""
+    def _execute_import_attr_from_class(obj):
+        # Create an instance of the class
+        other_cls_obj = other_cls()
+
+        # Check whether that class contains the desired attribute
+        _check_attrs(other_cls_obj, type(other_cls_obj).__name__, attr_name)
+
+        # Copy the contents of that attribute in the other class into
+        # an attribute with the same name in the current class
+        setattr(obj, attr_name, deepcopy(getattr(other_cls_obj, attr_name)))
+    return _execute_import_attr_from_class
